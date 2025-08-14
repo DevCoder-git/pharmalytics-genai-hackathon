@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: pharmalytics_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: pharmalytics_db
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+
+  redis:
+    image: redis:7-alpine
+    container_name: pharmalytics_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  web:
+    build: .
+    container_name: pharmalytics_web
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - MONGO_URI=mongodb://admin:password123@mongodb:27017/pharmalytics_db?authSource=admin
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      - mongodb
+      - redis
+    command: python manage.py runserver 0.0.0.0:8000
+
+  celery:
+    build: .
+    container_name: pharmalytics_celery
+    restart: unless-stopped
+    environment:
+      - DEBUG=True
+      - MONGO_URI=mongodb://admin:password123@mongodb:27017/pharmalytics_db?authSource=admin
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      - mongodb
+      - redis
+    command: celery -A pharmalytics_backend worker --loglevel=info
+
+volumes:
+  mongodb_data:
+  redis_data:
